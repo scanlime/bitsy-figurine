@@ -1,8 +1,10 @@
 # Don't check in game files
 *.html
 
-# Ignore entire output dir
+# Ignore outputs
 output/
+*.stl
+*.scad
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
