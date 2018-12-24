@@ -61,8 +61,11 @@ union() {
             // Raised text on topside
             translate([0, 0, base_thick - label_depth])
             linear_extrude(height=label_depth*2)
-            translate([label_margin, label_margin + label_size * 0.25])
-            text(text=displayname, size=label_size, font=label_font_top);
+            intersection() {
+                translate([label_margin, label_margin + label_size * 0.25])
+                    text(text=displayname, size=label_size, font=label_font_top);
+                square(size=[base_width, base_height]);
+            }
         }
 
         // Sunken text on underside
