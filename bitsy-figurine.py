@@ -6,7 +6,7 @@
 
 from html.parser import HTMLParser
 import subprocess, multiprocessing
-import sys, os, re
+import sys, os, re, statistics
 
 openscad_exe = 'C:/Program Files/OpenSCAD/openscad.exe'
 openscad_template = '''// %(tag)r
@@ -20,6 +20,7 @@ unit = 4;
 base_thick = 2.8;
 base_border = 11;
 base_round = 5;
+support_size = 2;
 
 label_size = 4;
 label_font_top = "Consolas:style=Bold";
@@ -80,19 +81,40 @@ union() {
     offset(delta=-pixel_round)
     union()
     {
-        // 2D pixel squares
         %(pixels)s
+    }
+
+    // Support posts
+    linear_extrude(height=support_size)
+    translate([unit/2 - support_size/2, -pixel_glue - epsilon])
+    union()
+    {
+        %(supports)s
     }
 }
 '''
-openscad_pixel = (' '*8 +
-    'translate([%(x)d*unit, %(y)d*unit]) '
-    'offset(delta=pixel_glue) '
-    'square(size=unit);\n')
 
+openscad_pixel = (' '*8 +
+    'translate([%d*unit, %d*unit]) offset(delta=pixel_glue) ' +
+    'square(size=unit);')
+
+openscad_support = (' '*8 +
+    'translate([%d*unit, 0]) ' +
+    'square(size=[support_size, %d*unit + pixel_glue*3]);')
 
 def openscad_str(s):
     return 'str(%s)' % ','.join('chr(%d)' % ord(c) for c in s)
+
+def move_reachable_pixels(from_set, to_set, xy):
+    if xy in from_set:
+        from_set.remove(xy)
+        to_set.add(xy)
+    x, y = xy
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            nxy = (x + dx, y + dy)
+            if nxy in from_set:
+                move_reachable_pixels(from_set, to_set, nxy)
 
 
 class Figurine:
@@ -105,6 +127,29 @@ class Figurine:
         s = re.subn('[^a-zA-Z0-9]', '_', s)[0]
         s = re.subn('_+', '_', s)[0]
         return s + ext
+
+    def iter_supports(self):
+        # At first assume all pixels are unsupported
+        unsupported = set()
+        for xy in self.image.iter_pixels():
+            unsupported.add(xy)
+
+        # Support at the base
+        supported_by_base = set()
+        for x in range(8):
+            move_reachable_pixels(unsupported, supported_by_base, (x, -1))
+
+        # For each remaining unsupported pixel, find all adjoining
+        while unsupported:
+            xy = unsupported.pop()
+            group = set()
+            group.add(xy)
+            move_reachable_pixels(unsupported, group, xy)
+            # Find the lowest row
+            lowest_y = min(y for (x, y) in group)
+            # Center point in that row
+            lowest_x_list = [x for (x, y) in group if y == lowest_y]
+            yield (statistics.median(lowest_x_list), lowest_y)
 
     @property
     def tag(self):
@@ -130,23 +175,15 @@ class Figurine:
 
     @property
     def openscad_code(self):
-        pixels = ''
-        xrange = None
-        for y, (line,) in enumerate(reversed(self.image.lines)):
-            for x, pixel in enumerate(line):
-                if pixel == '1':
-                    pixels += openscad_pixel % dict(x=x, y=y)
-                    if xrange:
-                        xrange = (min(xrange[0], x), max(xrange[1], x))
-                    else:
-                        xrange = (x, x)
-        if not xrange:
-            xrange = (0, 0)
+        pixels = '\n'.join(openscad_pixel % xy for xy in self.image.iter_pixels())
+        supports = '\n'.join(openscad_support % xy for xy in self.iter_supports())
+        xrange = self.image.xrange
         custom_text_lines = (self.custom_text + '\n\n').split('\n')
         return openscad_template % dict(
             xmin = xrange[0],
             xmax = xrange[1],
             pixels = pixels,
+            supports = supports,
             displayname = openscad_str(self.displayname),
             custom_text_1 = openscad_str(custom_text_lines[0]),
             custom_text_2 = openscad_str(custom_text_lines[1]),
@@ -175,6 +212,25 @@ class BitsyImage:
         self.ident = ident
         self.blocktype = blocktype
         self.tag = '%s_%s.%s.%d' % (name, blocktype, ident, index)
+
+    def iter_pixels(self):
+        for y, (line,) in enumerate(reversed(self.lines)):
+            for x, pixel in enumerate(line):
+                if pixel == '1':
+                    yield (x, y)
+
+    @property
+    def xrange(self):
+        xrange = None
+        for (x, y) in self.iter_pixels():
+            if xrange:
+                xrange = (min(xrange[0], x), max(xrange[1], x))
+            else:
+                xrange = (x, x)
+        if xrange:
+            return xrange
+        else:
+            return (0, 0)
 
 
 class BitsyHTMLParser(HTMLParser):
