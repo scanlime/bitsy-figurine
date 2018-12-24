@@ -37,6 +37,7 @@ pixel_round = 1.0;
 pixel_glue = 1.0;
 
 epsilon = 0.001;
+minimum_text_margin = 0.5;
 $fn = 35;
 
 base_width = (%(xmax)d-%(xmin)d+1)*unit + 2*base_border;
@@ -64,7 +65,7 @@ union() {
             intersection() {
                 translate([label_margin, label_margin + label_size * 0.25])
                     text(text=displayname, size=label_size, font=label_font_top);
-                square(size=[base_width, base_height]);
+                square(size=[base_width - minimum_text_margin, base_height]);
             }
         }
 
@@ -113,7 +114,8 @@ class BitsyImage:
         if index:
             self.tag += '_%d' % index
         if custom_text:
-            self.tag += '_%s' % re.subn('[^a-zA-Z0-9]', '_', custom_text)[0]
+            self.tag += '_%s' % custom_text
+        self.tag, _ = re.subn('[^a-zA-Z0-9]', '_', self.tag)
         self.scad_file = os.path.join(output_path, self.tag + '.scad')
         self.stl_file = os.path.join(output_path, self.tag + '.stl')
 
