@@ -9,6 +9,7 @@ import subprocess
 import sys
 import os
 import re
+import multiprocessing
 
 output_path = 'output'
 name_redact_re = r'(npc|irl|train|vip|seaside|swamp|farm|mountain|worldmap)_'
@@ -222,15 +223,27 @@ class BitsyHTMLParser(HTMLParser):
             self.images.append(BitsyImage(image, name, i, ident, blocktype))
 
 
-if len(sys.argv) >= 2:
-    with open(sys.argv[1], 'rb') as f:
-        filter = sys.argv[2:]
-        parser = BitsyHTMLParser()
-        parser.feed(f.read().decode('utf8', 'replace'))
-        for image in parser.images:
-            if image.test_filter(filter):
-                image = image.customize("tiny critter\nsays hello ♥")
-                print(image.tag)
-                image.write_stl()
-else:
-    print('usage: %s index.html [filter]' % sys.argv[0])
+def write_image_stl(image):
+    image.write_stl()
+    print(image.stl_file)
+
+
+def main():
+    if len(sys.argv) >= 2:
+        with open(sys.argv[1], 'rb') as f:
+            filter = sys.argv[2:]
+            parser = BitsyHTMLParser()
+            parser.feed(f.read().decode('utf8', 'replace'))
+
+            images = []
+            for image in parser.images:
+                if image.test_filter(filter):
+                    print(image.tag)
+                    images.append(image.customize("tiny critter\nsays hello ♥"))
+
+            multiprocessing.Pool().map(write_image_stl, images)
+    else:
+        print('usage: %s index.html [filter]' % sys.argv[0])
+
+if __name__ == '__main__':
+    main()
