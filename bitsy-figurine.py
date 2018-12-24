@@ -5,17 +5,11 @@
 #
 
 from html.parser import HTMLParser
-import subprocess
-import sys
-import os
-import re
-import multiprocessing
-
-output_path = 'output'
-name_redact_re = r'(npc|irl|train|vip|seaside|swamp|farm|mountain|worldmap)_'
+import subprocess, multiprocessing
+import sys, os, re
 
 openscad_exe = 'C:/Program Files/OpenSCAD/openscad.exe'
-openscad_template = '''// %(tag)s
+openscad_template = '''// %(tag)r
 
 displayname = %(displayname)s;
 custom_text_1 = %(custom_text_1)s;
@@ -101,40 +95,44 @@ def openscad_str(s):
     return 'str(%s)' % ','.join('chr(%d)' % ord(c) for c in s)
 
 
-class BitsyImage:
-    def __init__(self, image, name, index, ident, blocktype, custom_text=''):
+class Figurine:
+    def __init__(self, image, custom_text='', name_simplify_re=None):
         self.image = image
-        self.name = name
-        self.index = index
-        self.ident = ident
-        self.blocktype = blocktype
         self.custom_text = custom_text
-        self.displayname, _ = re.subn(name_redact_re, '', name, flags=re.IGNORECASE)
-        self.tag = '%s_%s%s' % (self.displayname, blocktype, ident)
-        if index:
-            self.tag += '_%d' % index
-        if custom_text:
-            self.tag += '_%s' % custom_text
-        self.tag, _ = re.subn('[^a-zA-Z0-9]', '_', self.tag)
-        self.scad_file = os.path.join(output_path, self.tag + '.scad')
-        self.stl_file = os.path.join(output_path, self.tag + '.stl')
+        self.name_simplify_re = name_simplify_re
 
-    def customize(self, text):
-        return BitsyImage(self.image, self.name, self.index,
-            self.ident, self.blocktype, custom_text=text)
+    def _filename_for_string(self, s, ext=''):
+        s = re.subn('[^a-zA-Z0-9]', '_', s)[0]
+        s = re.subn('_+', '_', s)[0]
+        return s + ext
 
-    def test_filter(self, filter):
-        if not filter:
-            return True
-        for f in filter:
-            if self.tag.find(f) >= 0:
-                return True
-        return False
+    @property
+    def tag(self):
+        if self.custom_text:
+            return '%s_%s' % (self.image.tag, self.custom_text)
+        else:
+            return self.image.tag
 
-    def get_openscad_code(self):
+    @property
+    def displayname(self):
+        if self.name_simplify_re:
+            return re.subn(self.name_simplify_re, '', self.image.name, flags=re.IGNORECASE)[0]
+        else:
+            return self.image.name
+
+    @property
+    def scad_filename(self):
+        return self._filename_for_string(self.tag, '.scad')
+
+    @property
+    def stl_filename(self):
+        return self._filename_for_string(self.tag, '.stl')
+
+    @property
+    def openscad_code(self):
         pixels = ''
         xrange = None
-        for y, (line,) in enumerate(reversed(self.image)):
+        for y, (line,) in enumerate(reversed(self.image.lines)):
             for x, pixel in enumerate(line):
                 if pixel == '1':
                     pixels += openscad_pixel % dict(x=x, y=y)
@@ -154,15 +152,29 @@ class BitsyImage:
             custom_text_2 = openscad_str(custom_text_lines[1]),
             tag = self.tag)
 
-    def write_openscad(self):
-        code = self.get_openscad_code()
-        with open(self.scad_file, 'wb') as f:
-            f.write(code.encode('utf8'))
+    def write_openscad(self, output_path='.'):
+        path = os.path.join(output_path, self.scad_filename)
+        code = self.openscad_code.encode('utf8')
+        with open(path, 'wb') as f:
+            f.write(code)
             f.close()
+        return path
 
-    def write_stl(self):
-        self.write_openscad()
-        subprocess.run([ openscad_exe, '-o', self.stl_file, self.scad_file ])
+    def write_stl(self, output_path='.'):
+        scad = self.write_openscad(output_path)
+        stl = os.path.join(output_path, self.stl_filename)
+        subprocess.run([ openscad_exe, '-o', stl, scad ])
+        return stl
+
+
+class BitsyImage:
+    def __init__(self, lines, name, index, ident, blocktype):
+        self.lines = lines
+        self.name = name
+        self.index = index
+        self.ident = ident
+        self.blocktype = blocktype
+        self.tag = '%s_%s.%s.%d' % (name, blocktype, ident, index)
 
 
 class BitsyHTMLParser(HTMLParser):
@@ -228,9 +240,22 @@ class BitsyHTMLParser(HTMLParser):
             self.images.append(BitsyImage(image, name, i, ident, blocktype))
 
 
-def write_image_stl(image):
-    image.write_stl()
-    print(image.stl_file)
+def visit_image(image):
+    fig = Figurine(image,
+        "tiny critter\nsays hello ♥",
+        r'(npc|irl|train|vip|seaside|swamp|farm|mountain|worldmap)_')
+    stl = fig.write_stl('output')
+    print(stl)
+
+
+def filter_test(filters, image):
+    tag = image.tag
+    if not filters:
+        return True
+    for f in filters:
+        if tag.find(f) >= 0:
+            return True
+    return False
 
 
 def main():
@@ -242,11 +267,11 @@ def main():
 
             images = []
             for image in parser.images:
-                if image.test_filter(filter):
+                if filter_test(filter, image):
                     print(image.tag)
-                    images.append(image.customize("tiny critter\nsays hello ♥"))
+                    images.append(image)
 
-            multiprocessing.Pool().map(write_image_stl, images)
+            multiprocessing.Pool().map(visit_image, images)
     else:
         print('usage: %s index.html [filter]' % sys.argv[0])
 
