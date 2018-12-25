@@ -6,7 +6,7 @@
 
 from html.parser import HTMLParser
 import subprocess, multiprocessing
-import sys, os, re, statistics
+import sys, os, re
 
 openscad_exe = 'C:/Program Files/OpenSCAD/openscad.exe'
 openscad_template = '''// %(tag)r
@@ -20,7 +20,9 @@ unit = 4;
 base_thick = 2.8;
 base_border = 11;
 base_round = 5;
-support_size = 2;
+
+support_width = unit;
+support_thickness = unit / 3;
 
 label_size = 4;
 label_font_top = "Consolas:style=Bold";
@@ -85,8 +87,8 @@ union() {
     }
 
     // Support posts
-    linear_extrude(height=support_size)
-    translate([unit/2 - support_size/2, -pixel_glue - epsilon])
+    linear_extrude(height=support_thickness)
+    translate([unit/2 - support_width/2, -pixel_glue - epsilon])
     union()
     {
         %(supports)s
@@ -100,7 +102,7 @@ openscad_pixel = (' '*8 +
 
 openscad_support = (' '*8 +
     'translate([%d*unit, 0]) ' +
-    'square(size=[support_size, %d*unit + pixel_glue*3]);')
+    'square(size=[support_width, %d*unit + pixel_glue*3]);')
 
 def openscad_str(s):
     return 'str(%s)' % ','.join('chr(%d)' % ord(c) for c in s)
@@ -149,7 +151,8 @@ class Figurine:
             lowest_y = min(y for (x, y) in group)
             # Center point in that row
             lowest_x_list = [x for (x, y) in group if y == lowest_y]
-            yield (statistics.median(lowest_x_list), lowest_y)
+            lowest_x_list.sort()
+            yield (lowest_x_list[len(lowest_x_list) // 2], lowest_y)
 
     @property
     def tag(self):
