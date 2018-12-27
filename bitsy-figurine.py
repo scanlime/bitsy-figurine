@@ -6,10 +6,10 @@
 
 from html.parser import HTMLParser
 import subprocess, multiprocessing
-import sys, os, re
+import sys, os, re, math
 
-openscad_exe = 'C:/Program Files/OpenSCAD/openscad.exe'
 openscad_template = '''// %(tag)r
+// pixels=%(num_pixels)d supports=%(num_supports)d
 
 displayname = %(displayname)s;
 custom_text_1 = %(custom_text_1)s;
@@ -83,7 +83,7 @@ union() {
     offset(delta=-pixel_round)
     union()
     {
-        %(pixels)s
+%(pixels)s
     }
 
     // Support posts
@@ -91,21 +91,21 @@ union() {
     translate([unit/2 - support_width/2, -pixel_glue - epsilon])
     union()
     {
-        %(supports)s
+%(supports)s
     }
 }
 '''
 
 openscad_pixel = (' '*8 +
-    'translate([%d*unit, %d*unit]) offset(delta=pixel_glue) ' +
+    'translate([%s*unit, %s*unit]) offset(delta=pixel_glue) ' +
     'square(size=unit);')
 
 openscad_support = (' '*8 +
-    'translate([%d*unit, 0]) ' +
-    'square(size=[support_width, %d*unit + pixel_glue*3]);')
+    'translate([%s*unit, 0]) ' +
+    'square(size=[support_width, %s*unit + pixel_glue*3]);')
 
 def openscad_str(s):
-    return 'str(%s)' % ','.join('chr(%d)' % ord(c) for c in s)
+    return 'str(%s)' % ','.join('chr(%s)' % ord(c) for c in s)
 
 def move_reachable_pixels(from_set, to_set, xy):
     if xy in from_set:
@@ -149,10 +149,19 @@ class Figurine:
             move_reachable_pixels(unsupported, group, xy)
             # Find the lowest row
             lowest_y = min(y for (x, y) in group)
-            # Center point in that row
+            # X for center of mass
+            center_x = sum(x for (x, y) in group) / len(group)
+            # X points on that bottom row
             lowest_x_list = [x for (x, y) in group if y == lowest_y]
-            lowest_x_list.sort()
-            yield (lowest_x_list[len(lowest_x_list) // 2], lowest_y)
+            # If the center is under two pixels, we can place it at the proper
+            # location between them. Otherwise we pick the center of the closest
+            # pixel.
+            if (int(center_x) in lowest_x_list) and (int(center_x + 1) in lowest_x_list):
+                yield (center_x, lowest_y)
+            else:
+                distances = [(abs(center_x - x), x) for x in lowest_x_list]
+                distances.sort()
+                yield (distances[0][1], lowest_y)
 
     @property
     def tag(self):
@@ -178,15 +187,17 @@ class Figurine:
 
     @property
     def openscad_code(self):
-        pixels = '\n'.join(openscad_pixel % xy for xy in self.image.iter_pixels())
-        supports = '\n'.join(openscad_support % xy for xy in self.iter_supports())
+        pixels = [openscad_pixel % xy for xy in self.image.iter_pixels()]
+        supports = [openscad_support % xy for xy in self.iter_supports()]
         xrange = self.image.xrange
         custom_text_lines = (self.custom_text + '\n\n').split('\n')
         return openscad_template % dict(
             xmin = xrange[0],
             xmax = xrange[1],
-            pixels = pixels,
-            supports = supports,
+            pixels = '\n'.join(pixels),
+            supports = '\n'.join(supports),
+            num_pixels = len(pixels),
+            num_supports = len(supports),
             displayname = openscad_str(self.displayname),
             custom_text_1 = openscad_str(custom_text_lines[0]),
             custom_text_2 = openscad_str(custom_text_lines[1]),
@@ -200,7 +211,7 @@ class Figurine:
             f.close()
         return path
 
-    def write_stl(self, output_path='.'):
+    def write_stl(self, output_path='.', openscad_exe='openscad'):
         scad = self.write_openscad(output_path)
         stl = os.path.join(output_path, self.stl_filename)
         subprocess.run([ openscad_exe, '-o', stl, scad ])
