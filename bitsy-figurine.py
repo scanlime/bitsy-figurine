@@ -103,7 +103,7 @@ openscad_pixel = (' '*8 +
     'square(size=unit);')
 
 openscad_support = (' '*8 +
-    'translate([%s*unit, 0]) ' +
+    'translate([%s*unit, %s*unit]) ' +
     'square(size=[support_width, %s*unit + pixel_glue*3]);')
 
 def openscad_str(s):
@@ -149,21 +149,36 @@ class Figurine:
             group = set()
             group.add(xy)
             move_reachable_pixels(unsupported, group, xy)
+
             # Find the lowest row
             lowest_y = min(y for (x, y) in group)
+
             # X for center of mass
             center_x = sum(x for (x, y) in group) / len(group)
+
             # X points on that bottom row
             lowest_x_list = [x for (x, y) in group if y == lowest_y]
+
             # If the center is under two pixels, we can place it at the proper
             # location between them. Otherwise we pick the center of the closest
             # pixel.
-            if (int(center_x) in lowest_x_list) and (int(center_x + 1) in lowest_x_list):
-                yield (center_x, lowest_y)
+            if (int(center_x) in lowest_x_list) and (int(math.ceil(center_x)) in lowest_x_list):
+                support_x = center_x
             else:
                 distances = [(abs(center_x - x), x) for x in lowest_x_list]
                 distances.sort()
-                yield (distances[0][1], lowest_y)
+                support_x = distances[0][1]
+
+            # Supports extend down to the tallest pixel supported directly
+            # by the base, on this column. If tupport_x is in-between pixels
+            # we pick the lowest of the left and right peaks.
+            support_left_x = int(support_x)
+            support_right_x = int(math.ceil(support_x))
+            highest_supported = min(
+                max((y for (x, y) in supported_by_base if x == support_left_x), default=0),
+                max((y for (x, y) in supported_by_base if x == support_right_x), default=0))
+
+            yield (support_x, highest_supported, lowest_y - highest_supported)
 
     @property
     def tag(self):
