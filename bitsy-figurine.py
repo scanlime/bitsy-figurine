@@ -35,7 +35,7 @@ pixel_glue = 1.0;
 
 epsilon = 0.001;
 minimum_text_margin = 0.5;
-$fn = 35;
+$fn = 8;
 
 base_width = (%(xmax)d-%(xmin)d+1)*unit + 2*base_border;
 base_height = unit + base_border;
@@ -50,6 +50,8 @@ union() {
 
     difference() {
         union() {
+            $fn = 40;
+
             // Rounded pedestal
             linear_extrude(height=base_thick)
             offset(r=base_round)
@@ -186,6 +188,10 @@ class Figurine:
         return self._filename_for_string(self.tag, '.stl')
 
     @property
+    def png_filename(self):
+        return self._filename_for_string(self.tag, '.png')
+
+    @property
     def openscad_code(self):
         pixels = [openscad_pixel % xy for xy in self.image.iter_pixels()]
         supports = [openscad_support % xy for xy in self.iter_supports()]
@@ -214,8 +220,17 @@ class Figurine:
     def write_stl(self, output_path='.', openscad_exe='openscad'):
         scad = self.write_openscad(output_path)
         stl = os.path.join(output_path, self.stl_filename)
-        subprocess.run([ openscad_exe, '-o', stl, scad ])
+        subprocess.run([ openscad_exe, '-o', stl, scad ], stdout=subprocess.DEVNULL)
         return stl
+
+    def write_png(self, output_path='.', openscad_exe='openscad', size=(800, 800)):
+        scad = self.write_openscad(output_path)
+        png = os.path.join(output_path, self.png_filename)
+        subprocess.run([ openscad_exe, '-o', png, scad,
+            '--imgsize=%d,%d' % size,
+            '--camera=10,15,0,-20,10,20,145'
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return png
 
 
 class BitsyImage:
@@ -314,6 +329,7 @@ def visit_image(image):
     fig = Figurine(image,
         "tiny critter\nsays hello ♥",
         r'(npc|irl|train|vip|seaside|swamp|farm|mountain|worldmap)_')
+    fig.write_png('output')
     stl = fig.write_stl('output')
     print(stl)
 
