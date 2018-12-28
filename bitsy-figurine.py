@@ -45,9 +45,9 @@ rotate([0, 0, 20])
 union() {
 
     // Base
+    color("gainsboro")
     translate([%(xmin)d*unit-base_border, -base_thick - pixel_glue + epsilon, unit + base_border])
     rotate([-90, 0, 0])
-
     difference() {
         union() {
             $fn = 40;
@@ -80,6 +80,7 @@ union() {
     }
 
     // Pixel cubes with a bit of round offset
+    color("palegreen")
     linear_extrude(height=unit)
     offset(r=pixel_round)
     offset(delta=-pixel_round)
@@ -89,6 +90,7 @@ union() {
     }
 
     // Support posts
+    color("white")
     linear_extrude(height=support_thickness)
     translate([unit/2 - support_width/2, -pixel_glue - epsilon])
     union()
