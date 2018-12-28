@@ -175,8 +175,8 @@ class Figurine:
             support_left_x = int(support_x)
             support_right_x = int(math.ceil(support_x))
             highest_supported = min(
-                max((y for (x, y) in supported_by_base if x == support_left_x), default=0),
-                max((y for (x, y) in supported_by_base if x == support_right_x), default=0))
+                max((y for (x, y) in supported_by_base if x == support_left_x and y < lowest_y), default=0),
+                max((y for (x, y) in supported_by_base if x == support_right_x and y < lowest_y), default=0))
 
             yield (support_x, highest_supported, lowest_y - highest_supported)
 
