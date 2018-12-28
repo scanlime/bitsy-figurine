@@ -35,7 +35,7 @@ pixel_glue = 1.0;
 
 epsilon = 0.001;
 minimum_text_margin = 0.5;
-$fn = 8;
+$fn = 16;
 
 base_width = (%(xmax)d-%(xmin)d+1)*unit + 2*base_border;
 base_height = unit + base_border;
@@ -45,7 +45,6 @@ rotate([0, 0, 20])
 union() {
 
     // Base
-    color("gainsboro")
     translate([%(xmin)d*unit-base_border, -base_thick - pixel_glue + epsilon, unit + base_border])
     rotate([-90, 0, 0])
     difference() {
@@ -53,12 +52,14 @@ union() {
             $fn = 40;
 
             // Rounded pedestal
+            color("silver")
             linear_extrude(height=base_thick)
             offset(r=base_round)
             offset(delta=-base_round)
             square(size=[base_width, base_height]);
 
             // Raised text on topside
+            color("white")
             translate([0, 0, base_thick - label_depth])
             linear_extrude(height=label_depth*2)
             intersection() {
