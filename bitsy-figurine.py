@@ -189,7 +189,8 @@ class Figurine:
 
     @property
     def png_filename(self):
-        return self._filename_for_string(self.tag, '.png')
+        # Use image tag only; customization is not visible
+        return self._filename_for_string(self.image.tag, '.png')
 
     @property
     def openscad_code(self):
