@@ -128,7 +128,7 @@ class Figurine:
         self.name_simplify_re = name_simplify_re
 
     def _filename_for_string(self, s, ext=''):
-        s = re.subn('[^a-zA-Z0-9]', '_', s)[0]
+        s = re.subn('[^a-zA-Z0-9\.\-_]', '_', s)[0]
         s = re.subn('_+', '_', s)[0]
         return s + ext
 
@@ -327,9 +327,7 @@ class BitsyHTMLParser(HTMLParser):
 
 
 def visit_image(image):
-    fig = Figurine(image,
-        "tiny critter\nsays hello ♥",
-        r'(npc|irl|train|vip|seaside|swamp|farm|mountain|worldmap)_')
+    fig = Figurine(image)
     fig.write_png('output')
     stl = fig.write_stl('output')
     print(stl)
