@@ -4,9 +4,20 @@
 # - Micah Scott 2018
 #
 
+import subprocess
+import multiprocessing
+import sys
+import os
+import re
+import math
+import html
 from html.parser import HTMLParser
-import subprocess, multiprocessing
-import sys, os, re, math
+
+try:
+    from stl import mesh
+except ImportError:
+    print("Consider installing numpy-stl for binary STL output")
+    mesh = None
 
 openscad_template = '''// %(tag)r
 // pixels=%(num_pixels)d supports=%(num_supports)d
@@ -125,12 +136,13 @@ def move_reachable_pixels(from_set, to_set, xy):
 
 
 class Figurine:
-    def __init__(self, image, custom_text='', name_simplify_re=None):
+    def __init__(self, image, custom_text='', name_omission_list=()):
         self.image = image
         self.custom_text = custom_text
-        self.name_simplify_re = name_simplify_re
+        self.name_simplify_re = '(%s)' % '|'.join(re.escape(n) for n in name_omission_list)
 
     def _filename_for_string(self, s, ext=''):
+        s = s.lower()
         s = re.subn('[^a-zA-Z0-9\.\-_]', '_', s)[0]
         s = re.subn('_+', '_', s)[0]
         return s + ext
@@ -192,10 +204,7 @@ class Figurine:
 
     @property
     def displayname(self):
-        if self.name_simplify_re:
-            return re.subn(self.name_simplify_re, '', self.image.name, flags=re.IGNORECASE)[0]
-        else:
-            return self.image.name
+        return re.subn(self.name_simplify_re, '', self.image.name, flags=re.IGNORECASE)[0]
 
     @property
     def scad_filename(self):
@@ -240,6 +249,9 @@ class Figurine:
         scad = self.write_openscad(output_path)
         stl = os.path.join(output_path, self.stl_filename)
         subprocess.run([ openscad_exe, '-o', stl, scad ], stdout=subprocess.DEVNULL)
+        # Re-save STL as binary
+        if mesh:
+            mesh.Mesh.from_file(stl).save(stl)
         return stl
 
     def write_png(self, output_path='.', openscad_exe='openscad', size=(800, 800)):
@@ -344,37 +356,69 @@ class BitsyHTMLParser(HTMLParser):
             self.images.append(BitsyImage(image, name, i, ident, blocktype))
 
 
-def visit_image(image):
-    fig = Figurine(image)
-    fig.write_png('output')
-    stl = fig.write_stl('output')
-    print(stl)
+class Thumbnailer:
+    def __init__(self, output_path='.', output_filename='index.html'):
+        self.file = open(os.path.join(output_path, output_filename), 'w')
+        self.file.write('<!DOCTYPE html><html><body>\n')
+
+    def close(self):
+        self.file.write('</body></html>\n')
+        self.file.close()
+
+    def write(self, img_file, link_file, name=''):
+        self.file.write('<a href="%s"><img title="%s" width="200" height="200" src="%s"></a>\n' % (
+            html.escape(os.path.basename(link_file)),
+            html.escape(name),
+            html.escape(os.path.basename(img_file))))
 
 
-def filter_test(filters, image):
-    tag = image.tag
-    if not filters:
-        return True
-    for f in filters:
-        if tag.find(f) >= 0:
+class App:
+    def __init__(self, input_file, output_path='output', custom_text='', name_omission_list=(), filters=None):
+        parser = BitsyHTMLParser()
+        with open(input_file, 'rb') as f:
+            parser.feed(f.read().decode('utf8', 'replace'))
+        self.images = parser.images
+
+        self.output_path = output_path
+        self.custom_text = custom_text
+        self.name_omission_list = name_omission_list
+        self.filters = filters
+
+    def close(self):
+        self.thumbnailer.close()
+
+    def visit_image(self, image):
+        if self._filter_test(image):
+            fig = Figurine(image)
+            png = fig.write_png(self.output_path)
+            stl = fig.write_stl(self.output_path)
+            print(stl)
+            return (png, stl, fig.tag)
+
+    def run(self):
+        thumb = Thumbnailer(self.output_path)
+        results = multiprocessing.Pool().map(self.visit_image, self.images)
+        results = [r for r in results if r]
+        results.sort()
+        for r in results:
+            if r:
+                thumb.write(*r)
+        thumb.close()
+
+    def _filter_test(self, image):
+        tag = image.tag
+        if not self.filters:
             return True
-    return False
+        for f in self.filters:
+            if tag.find(f) >= 0:
+                return True
+        return False
 
 
 def main():
     if len(sys.argv) >= 2:
-        with open(sys.argv[1], 'rb') as f:
-            filter = sys.argv[2:]
-            parser = BitsyHTMLParser()
-            parser.feed(f.read().decode('utf8', 'replace'))
-
-            images = []
-            for image in parser.images:
-                if filter_test(filter, image):
-                    print(image.tag)
-                    images.append(image)
-
-            multiprocessing.Pool().map(visit_image, images)
+        app = App(sys.argv[1], filters=sys.argv[2:])
+        app.run()
     else:
         print('usage: %s index.html [filter]' % sys.argv[0])
 
