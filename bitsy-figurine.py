@@ -280,6 +280,12 @@ class BitsyImage:
                     yield (x, y)
 
     @property
+    def empty(self):
+        for xy in self.iter_pixels():
+            return False
+        return True
+
+    @property
     def xrange(self):
         xrange = None
         for (x, y) in self.iter_pixels():
@@ -406,6 +412,8 @@ class App:
         thumb.close()
 
     def _filter_test(self, image):
+        if image.empty:
+            return False
         tag = image.tag
         if not self.filters:
             return True
