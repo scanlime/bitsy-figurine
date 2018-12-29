@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 #
 # Make figurines from Bitsy sprites
-# - Micah Scott 2018
+#
+# Requires Python 3, OpenSCAD.
+# The 'numpy-stl' module is recommended but not required.
+#
+# Copyright (c) 2018 Micah Elizabeth Scott
+# See LICENSE for terms (MIT-style permissive license)
 #
 
 import argparse
