@@ -404,10 +404,16 @@ class App:
             fig = Figurine(image, custom_text=self.custom_text, name_omission_list=self.name_omission_list)
             png = fig.write_png(self.output_path)
             stl = fig.write_stl(self.output_path)
-            print(stl)
+            print('Finished %r' % stl)
             return (png, stl, fig.tag)
 
+    def list_images(self):
+        for image in self.images:
+            if self._filter_test(image):
+                print(image.tag)
+
     def run(self):
+        os.makedirs(self.output_path, exist_ok=True)
         thumb = Thumbnailer(self.output_path)
         results = multiprocessing.Pool().map(self.visit_image, self.images)
         results = [r for r in results if r]
@@ -431,15 +437,22 @@ class App:
 
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument('gamefile', help='HTML file containing a Bitsy game')
+    parser.add_argument('-l', '--list', action='store_true', help='List images rather than generating figurines')
     parser.add_argument('-f', '--filter', default=[], action='append',
         help='Filter; if any filters are specified, only images matching one or more are considered.')
     parser.add_argument('-o', '--output', default='output', help='Directory for output files')
     parser.add_argument('-c', '--custom', default=[], action='append', help='A line of customization text (up to 2)')
     parser.add_argument('-r', '--remove', default=[], action='append', help='Remove a string when it occurs in names')
+
     args = parser.parse_args()
     app = App(args.gamefile, args.output, '\n'.join(args.custom), args.remove, args.filter)
-    app.run()
+
+    if args.list:
+        app.list_images()
+    else:
+        app.run()
 
 if __name__ == '__main__':
     main()
