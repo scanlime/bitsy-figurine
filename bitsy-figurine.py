@@ -4,6 +4,7 @@
 # - Micah Scott 2018
 #
 
+import argparse
 import subprocess
 import multiprocessing
 import sys
@@ -395,7 +396,7 @@ class App:
 
     def visit_image(self, image):
         if self._filter_test(image):
-            fig = Figurine(image)
+            fig = Figurine(image, custom_text=self.custom_text, name_omission_list=self.name_omission_list)
             png = fig.write_png(self.output_path)
             stl = fig.write_stl(self.output_path)
             print(stl)
@@ -424,11 +425,16 @@ class App:
 
 
 def main():
-    if len(sys.argv) >= 2:
-        app = App(sys.argv[1], filters=sys.argv[2:])
-        app.run()
-    else:
-        print('usage: %s index.html [filter]' % sys.argv[0])
+    parser = argparse.ArgumentParser()
+    parser.add_argument('gamefile', help='HTML file containing a Bitsy game')
+    parser.add_argument('-f', '--filter', default=[], action='append',
+        help='Filter; if any filters are specified, only images matching one or more are considered.')
+    parser.add_argument('-o', '--output', default='output', help='Directory for output files')
+    parser.add_argument('-c', '--custom', default=[], action='append', help='A line of customization text (up to 2)')
+    parser.add_argument('-r', '--remove', default=[], action='append', help='Remove a string when it occurs in names')
+    args = parser.parse_args()
+    app = App(args.gamefile, args.output, '\n'.join(args.custom), args.remove, args.filter)
+    app.run()
 
 if __name__ == '__main__':
     main()
